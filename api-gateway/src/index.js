@@ -13,13 +13,15 @@ const ORDER_SERVICE_URL   = process.env.ORDER_SERVICE_URL   || 'http://localhost
 // "dev" format: GET /api/products 200 4.321 ms
 app.use(morgan('dev'));
 
-// pathRewrite strips the /api prefix before forwarding
-// e.g. GET /api/products → GET /products on product-service
+// Express strips the mount path before passing to middleware, so the proxy
+// receives '/' for '/api/products' and '/1' for '/api/products/1'.
+// pathRewrite prepends the service prefix back onto whatever path Express passes in.
+// e.g. '/' → '/products/'   '/1' → '/products/1'
 function makeProxy(target, prefix, serviceName) {
   return createProxyMiddleware({
     target,
     changeOrigin: true,
-    pathRewrite: { [`^/api/${prefix}`]: `/${prefix}` },
+    pathRewrite: { '^/': `/${prefix}/` },
     on: {
       error: (err, _req, res) => {
         console.error(`Proxy error (${serviceName}):`, err.message);
