@@ -13,40 +13,24 @@ const ORDER_SERVICE_URL   = process.env.ORDER_SERVICE_URL   || 'http://localhost
 // "dev" format: GET /api/products 200 4.321 ms
 app.use(morgan('dev'));
 
-// -------------------------------------------------------
-// Proxy routes
 // pathRewrite strips the /api prefix before forwarding
 // e.g. GET /api/products → GET /products on product-service
-// -------------------------------------------------------
-app.use(
-  '/api/products',
-  createProxyMiddleware({
-    target: PRODUCT_SERVICE_URL,
+function makeProxy(target, prefix, serviceName) {
+  return createProxyMiddleware({
+    target,
     changeOrigin: true,
-    pathRewrite: { '^/api/products': '/products' },
+    pathRewrite: { [`^/api/${prefix}`]: `/${prefix}` },
     on: {
-      error: (err, req, res) => {
-        console.error('Proxy error (product-service):', err.message);
-        res.status(502).json({ error: 'product-service unavailable' });
+      error: (err, _req, res) => {
+        console.error(`Proxy error (${serviceName}):`, err.message);
+        res.status(502).json({ error: `${serviceName} unavailable` });
       },
     },
-  })
-);
+  });
+}
 
-app.use(
-  '/api/orders',
-  createProxyMiddleware({
-    target: ORDER_SERVICE_URL,
-    changeOrigin: true,
-    pathRewrite: { '^/api/orders': '/orders' },
-    on: {
-      error: (err, req, res) => {
-        console.error('Proxy error (order-service):', err.message);
-        res.status(502).json({ error: 'order-service unavailable' });
-      },
-    },
-  })
-);
+app.use('/api/products', makeProxy(PRODUCT_SERVICE_URL, 'products', 'product-service'));
+app.use('/api/orders',   makeProxy(ORDER_SERVICE_URL,   'orders',   'order-service'));
 
 // Health check — Kubernetes probes hit this
 app.get('/health', (req, res) => {

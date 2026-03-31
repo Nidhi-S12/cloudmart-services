@@ -1,3 +1,4 @@
+import os
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from .database import engine, Base
@@ -6,12 +7,11 @@ from .routers import products
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # On startup: create tables if they don't exist
-    # In production we'd use Alembic migrations instead, but this is fine for local dev
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+    # create_all only in development — production uses Alembic migrations
+    if os.getenv("ENV", "development") == "development":
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
     yield
-    # On shutdown: close the connection pool
     await engine.dispose()
 
 
