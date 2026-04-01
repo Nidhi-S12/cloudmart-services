@@ -1,5 +1,5 @@
 from datetime import datetime
-from sqlalchemy import String, Text, Numeric, Integer, DateTime, func
+from sqlalchemy import String, Text, Numeric, Integer, Float, DateTime, func
 from sqlalchemy.orm import Mapped, mapped_column
 from .database import Base
 
@@ -12,6 +12,10 @@ class Product(Base):
     description: Mapped[str] = mapped_column(Text, nullable=True)
     price: Mapped[float] = mapped_column(Numeric(10, 2), nullable=False)
     stock: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    category: Mapped[str] = mapped_column(String(100), nullable=True, index=True)
+    image_url: Mapped[str] = mapped_column(Text, nullable=True)
+    rating: Mapped[float] = mapped_column(Float, nullable=True)
+    brand: Mapped[str] = mapped_column(String(100), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )

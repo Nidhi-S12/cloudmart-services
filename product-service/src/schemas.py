@@ -8,6 +8,10 @@ class ProductCreate(BaseModel):
     description: str | None = None
     price: Decimal
     stock: int = 0
+    category: str | None = None
+    image_url: str | None = None
+    rating: float | None = None
+    brand: str | None = None
 
 
 class ProductUpdate(BaseModel):
@@ -15,6 +19,10 @@ class ProductUpdate(BaseModel):
     description: str | None = None
     price: Decimal | None = None
     stock: int | None = None
+    category: str | None = None
+    image_url: str | None = None
+    rating: float | None = None
+    brand: str | None = None
 
 
 class ProductResponse(BaseModel):
@@ -23,7 +31,11 @@ class ProductResponse(BaseModel):
     id: int
     name: str
     description: str | None
-    price: Decimal  # matches Numeric(10,2) in DB — avoids float precision loss
+    price: Decimal
     stock: int
+    category: str | None
+    image_url: str | None
+    rating: float | None
+    brand: str | None
     created_at: datetime
     updated_at: datetime

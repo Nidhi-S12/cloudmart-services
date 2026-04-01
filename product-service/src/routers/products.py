@@ -1,6 +1,6 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, distinct, func
 from ..database import get_db
 from ..models import Product
 from ..schemas import ProductCreate, ProductUpdate, ProductResponse
@@ -15,9 +15,29 @@ async def get_product_or_404(db: AsyncSession, product_id: int) -> Product:
     return product
 
 
+@router.get("/categories", response_model=list[str])
+async def list_categories(db: AsyncSession = Depends(get_db)):
+    result = await db.execute(
+        select(distinct(Product.category)).where(Product.category.isnot(None)).order_by(Product.category)
+    )
+    return result.scalars().all()
+
+
 @router.get("/", response_model=list[ProductResponse])
-async def list_products(db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(Product).order_by(Product.id))
+async def list_products(
+    category: str | None = Query(None),
+    search: str | None = Query(None),
+    db: AsyncSession = Depends(get_db),
+):
+    query = select(Product)
+    if category:
+        query = query.where(Product.category == category)
+    if search:
+        query = query.where(
+            func.lower(Product.name).contains(search.lower())
+            | func.lower(Product.description).contains(search.lower())
+        )
+    result = await db.execute(query.order_by(Product.id))
     return result.scalars().all()
 
 
