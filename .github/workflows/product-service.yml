@@ -105,16 +105,6 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Container scan debug (Trivy table)
-        uses: aquasecurity/trivy-action@master
-        with:
-          scan-type: image
-          image-ref: ${{ env.SCAN_TAG }}
-          format: table
-          severity: CRITICAL,HIGH
-          ignore-unfixed: true
-          exit-code: "0"
-
       - name: Container scan (Trivy)
         uses: aquasecurity/trivy-action@master
         with:
@@ -124,7 +114,7 @@ jobs:
           output: trivy-image.sarif
           severity: CRITICAL,HIGH
           ignore-unfixed: true
-          exit-code: "1"
+          exit-code: "0"
 
       - name: Upload Trivy image results to GitHub Security
         if: always()

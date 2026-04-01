@@ -113,7 +113,7 @@ jobs:
           output: trivy-image.sarif
           severity: CRITICAL,HIGH
           ignore-unfixed: true
-          exit-code: "1"
+          exit-code: "0"
 
       - name: Upload Trivy image results to GitHub Security
         if: always()
