@@ -110,8 +110,7 @@ jobs:
         with:
           scan-type: image
           image-ref: ${{ env.SCAN_TAG }}
-          format: sarif
-          output: trivy-image.sarif
+          format: table
           severity: CRITICAL,HIGH
           ignore-unfixed: true
           exit-code: "1"
