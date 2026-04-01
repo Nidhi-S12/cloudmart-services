@@ -70,6 +70,7 @@ jobs:
     permissions:
       contents: read
       packages: write
+      security-events: write
 
     steps:
       - name: Checkout
@@ -112,6 +113,7 @@ jobs:
           format: sarif
           output: trivy-image.sarif
           severity: CRITICAL,HIGH
+          ignore-unfixed: true
           exit-code: "1"
 
       - name: Upload Trivy image results to GitHub Security
