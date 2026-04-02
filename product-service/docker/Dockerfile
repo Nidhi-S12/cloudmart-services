@@ -33,8 +33,9 @@ RUN addgroup --system appgroup && adduser --system --ingroup appgroup appuser
 # Copy installed packages from builder stage
 COPY --from=builder /install /usr/local
 
-# Copy application source
+# Copy application source and seed script
 COPY src/ ./src/
+COPY seed.py .
 
 # Switch to non-root user
 USER appuser
