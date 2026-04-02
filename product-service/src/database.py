@@ -5,6 +5,7 @@ from pydantic_settings import BaseSettings
 
 class Settings(BaseSettings):
     database_url: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/cloudmart"
+    db_ssl: bool = False  # set DB_SSL=true when connecting to RDS
 
     class Config:
         env_file = ".env"
@@ -12,12 +13,15 @@ class Settings(BaseSettings):
 
 settings = Settings()
 
+connect_args = {"ssl": "require"} if settings.db_ssl else {}
+
 # create_async_engine is non-blocking — queries don't block the event loop
 engine = create_async_engine(
     settings.database_url,
-    echo=False,       # set True to log all SQL (useful for debugging)
+    echo=False,
     pool_size=10,
     max_overflow=20,
+    connect_args=connect_args,
 )
 
 # Session factory — we create one session per request, then close it
