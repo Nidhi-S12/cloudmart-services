@@ -1,4 +1,4 @@
-onname: product-service CI
+name: product-service CI
 
 on:
   push:
