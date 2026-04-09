@@ -1,5 +1,14 @@
 # CloudMart Services
 
+![api-gateway CI](https://github.com/Nidhi-S12/cloudmart-services/actions/workflows/api-gateway.yml/badge.svg)
+![product-service CI](https://github.com/Nidhi-S12/cloudmart-services/actions/workflows/product-service.yml/badge.svg)
+![order-service CI](https://github.com/Nidhi-S12/cloudmart-services/actions/workflows/order-service.yml/badge.svg)
+![Node.js](https://img.shields.io/badge/Node.js-20-339933?logo=node.js&logoColor=white)
+![Python](https://img.shields.io/badge/Python-3.11-3776AB?logo=python&logoColor=white)
+![FastAPI](https://img.shields.io/badge/FastAPI-0.100+-009688?logo=fastapi&logoColor=white)
+![Docker](https://img.shields.io/badge/Docker-multi--stage-2496ED?logo=docker&logoColor=white)
+![License](https://img.shields.io/badge/license-MIT-green)
+
 Backend microservices monorepo for the CloudMart e-commerce platform. Three services — each independently containerised, CI-tested, and deployed to Kubernetes via GitOps.
 
 ---
@@ -23,6 +32,64 @@ Backend microservices monorepo for the CloudMart e-commerce platform. Three serv
 | [order-service](#order-service) | Node.js / Express | 3001 | ElastiCache Redis + Kafka |
 
 ---
+
+## Request & Response Flow
+
+### Browsing products
+
+```
+Browser  GET https://tulunad.click/
+    │
+    ▼  (server-side render)
+Next.js  GET http://api-gateway:3000/api/products?category=electronics
+    │
+    ▼
+API Gateway  strips /api prefix  →  GET http://product-service:8000/products?category=electronics
+    │
+    ▼
+Product Service  SELECT * FROM products WHERE category = 'electronics'  →  RDS PostgreSQL
+    │
+    ▼  JSON array of products
+API Gateway  ──▶  Next.js  ──▶  HTML rendered  ──▶  Browser
+```
+
+### Placing an order
+
+```
+Browser  POST https://tulunad.click/api/orders
+         body: { customerId: "user@gmail.com", items: [...] }
+    │
+    ▼
+API Gateway  →  POST http://order-service:3001/orders
+    │
+    ▼
+Order Service
+    ├── generates UUID for order
+    ├── calculates total
+    ├── Promise.all([
+    │     Redis SET order:<uuid>  JSON.stringify(order)  EX 86400   ← 24h TTL
+    │     Kafka PRODUCE  topic: order.created  key: <uuid>  value: order
+    │   ])
+    └── returns 201 { id, customerId, items, total, status: "pending" }
+    │
+    ▼
+Browser receives order confirmation
+```
+
+### Getting order history
+
+```
+Browser  GET https://tulunad.click/api/orders/customer/user@gmail.com
+    │
+    ▼
+API Gateway  →  GET http://order-service:3001/orders/customer/user@gmail.com
+    │
+    ▼
+Order Service  KEYS order:*  →  Redis  →  filters by customerId
+    │
+    ▼  JSON array of orders (from Redis, not DB — fast sub-millisecond reads)
+Browser
+```
 
 ## Service Architecture
 
