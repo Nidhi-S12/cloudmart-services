@@ -37,14 +37,15 @@ Backend microservices monorepo for the CloudMart e-commerce platform. Three serv
 
 ```mermaid
 flowchart TD
-    GW["api-gateway\nNode.js  :3000"]
+    classDef app fill:#059669,stroke:#065f46,color:#fff
+    classDef db fill:#7C3AED,stroke:#4c1d95,color:#fff
 
-    PS["product-service\nPython / FastAPI  :8000"]
-    OS["order-service\nNode.js  :3001"]
-
-    RDS[("RDS PostgreSQL\nproduct catalogue")]
-    Redis[("ElastiCache Redis\norder store  24h TTL")]
-    Kafka[("Kafka\ntopic: order.created")]
+    GW["API Gateway\nNode.js"]:::app
+    PS["Product Service\nPython / FastAPI"]:::app
+    OS["Order Service\nNode.js"]:::app
+    RDS[("RDS PostgreSQL\nproduct catalogue")]:::db
+    Redis[("ElastiCache Redis\norder store")]:::db
+    Kafka[("Kafka\nevent stream")]:::db
 
     GW -->|"/api/products/*"| PS
     GW -->|"/api/orders/*"| OS
@@ -62,19 +63,19 @@ flowchart TD
 ```mermaid
 sequenceDiagram
     participant B as Browser
-    participant FE as Next.js (SSR)
-    participant GW as api-gateway
-    participant PS as product-service
-    participant DB as RDS PostgreSQL
+    participant FE as Next.js
+    participant GW as API Gateway
+    participant PS as Product Service
+    participant DB as PostgreSQL
 
-    B->>FE: GET tulunad.click/?category=electronics
-    FE->>GW: GET /api/products?category=electronics
-    GW->>PS: GET /products?category=electronics
-    PS->>DB: SELECT * FROM products WHERE category='electronics'
+    B->>FE: GET /
+    FE->>GW: GET /api/products
+    GW->>PS: GET /products
+    PS->>DB: SELECT products
     DB-->>PS: rows
-    PS-->>GW: JSON array
-    GW-->>FE: JSON array
-    FE-->>B: rendered HTML with products
+    PS-->>GW: JSON
+    GW-->>FE: JSON
+    FE-->>B: rendered HTML
 ```
 
 ### Placing an order
@@ -82,20 +83,20 @@ sequenceDiagram
 ```mermaid
 sequenceDiagram
     participant B as Browser
-    participant GW as api-gateway
-    participant OS as order-service
+    participant GW as API Gateway
+    participant OS as Order Service
     participant R as Redis
     participant K as Kafka
 
-    B->>GW: POST /api/orders {customerId, items}
-    GW->>OS: POST /orders {customerId, items}
-    OS->>OS: generate UUID, calculate total
-    par store in Redis
-        OS->>R: SET order:<uuid> JSON EX 86400
-    and publish to Kafka
-        OS->>K: PRODUCE order.created {order}
+    B->>GW: POST /api/orders
+    GW->>OS: POST /orders
+    OS->>OS: generate ID, calculate total
+    par store order
+        OS->>R: SET order:<id> EX 24h
+    and publish event
+        OS->>K: PRODUCE order.created
     end
-    OS-->>GW: 201 {id, total, status: pending}
+    OS-->>GW: 201 created
     GW-->>B: order confirmation
 ```
 
@@ -104,18 +105,16 @@ sequenceDiagram
 ```mermaid
 sequenceDiagram
     participant B as Browser
-    participant GW as api-gateway
-    participant OS as order-service
+    participant GW as API Gateway
+    participant OS as Order Service
     participant R as Redis
 
-    B->>GW: GET /api/orders/customer/user@email.com
-    GW->>OS: GET /orders/customer/user@email.com
-    OS->>R: KEYS order:* → filter by customerId
-    R-->>OS: matching order keys
-    OS->>R: MGET all matching keys
-    R-->>OS: JSON strings
-    OS-->>GW: JSON array of orders
-    GW-->>B: order history
+    B->>GW: GET /api/orders/customer/:id
+    GW->>OS: GET /orders/customer/:id
+    OS->>R: get all orders for customer
+    R-->>OS: order data
+    OS-->>GW: JSON array
+    GW-->>B: order list
 ```
 
 ---
@@ -126,24 +125,24 @@ sequenceDiagram
 
 Single entry point for all API traffic from the frontend. No business logic — pure routing.
 
-**Why a gateway?** The frontend talks to one URL (`/api/*`) regardless of which backend service handles it. Services can be refactored or replaced without touching the frontend.
+**Why a gateway?** The frontend talks to one URL regardless of which backend service handles it. Services can be refactored or replaced without touching the frontend.
 
 | Path | Proxied to |
 |------|-----------|
-| `/api/products/*` | `product-service:8000/products/*` |
-| `/api/orders/*` | `order-service:3001/orders/*` |
+| `/api/products/*` | `product-service/products/*` |
+| `/api/orders/*` | `order-service/orders/*` |
 | `/health` | Returns `{ status: "ok" }` |
 
 | Variable | Description |
 |----------|------------|
-| `PRODUCT_SERVICE_URL` | `http://product-service:8000` |
-| `ORDER_SERVICE_URL` | `http://order-service:3001` |
+| `PRODUCT_SERVICE_URL` | Internal K8s DNS URL for product-service |
+| `ORDER_SERVICE_URL` | Internal K8s DNS URL for order-service |
 
 ---
 
 ## Product Service
 
-**Language:** Python / FastAPI  **Port:** 8000  **DB:** RDS PostgreSQL (db.t3.micro)
+**Language:** Python / FastAPI  **Port:** 8000  **DB:** RDS PostgreSQL
 
 Manages the product catalogue with category filtering and full-text search.
 
@@ -169,9 +168,9 @@ Manages the product catalogue with category filtering and full-text search.
 
 **Language:** Node.js / Express  **Port:** 3001  **Stores:** Redis + Kafka
 
-When an order is placed, two things happen in parallel — Redis write + Kafka publish. Both are fire-and-respond; if either fails, the request errors cleanly.
+When an order is placed, two things happen in parallel — Redis write + Kafka publish.
 
-**Why Redis?** Orders are transient (24h TTL). Redis is sub-millisecond for this write-once, read-a-few-times pattern — no need for a persistent DB here.
+**Why Redis?** Orders are transient (24h TTL). Redis is sub-millisecond for this write-once, read-a-few-times pattern.
 
 **Why Kafka?** Decouples order-service from downstream consumers (notifications, inventory, analytics). Order-service publishes and moves on — it doesn't care who's listening.
 
@@ -193,33 +192,34 @@ When an order is placed, two things happen in parallel — Redis write + Kafka p
 
 ```mermaid
 flowchart TD
-    Push["git push to main\n(only triggers if service path changed)"]
+    classDef git fill:#24292e,stroke:#000,color:#fff
+    classDef sec fill:#EF4444,stroke:#991b1b,color:#fff
+    classDef build fill:#0EA5E9,stroke:#0369a1,color:#fff
+    classDef cd fill:#EF7B4D,stroke:#9a3412,color:#fff
 
-    subgraph Security["Security Scans  (parallel)"]
-        GL["Gitleaks\nsecrets in git history"]
-        SG["Semgrep\nSAST — OWASP Top 10"]
-        TV1["Trivy\ndependency CVEs"]
+    Push["git push\ntriggers only on changed service path"]:::git
+
+    subgraph Security["Security Scans — parallel"]
+        GL["Gitleaks\nsecrets in git history"]:::sec
+        SG["Semgrep\nSAST — OWASP Top 10"]:::sec
+        TV1["Trivy\ndependency CVEs"]:::sec
     end
 
     subgraph Build["Build & Push"]
-        Docker["docker build\nmulti-stage"]
-        GHCR["push to GHCR\n:sha-abc1234"]
-        TV2["Trivy\nimage scan"]
+        Docker["docker build\nmulti-stage"]:::build
+        GHCR["push to registry\ntagged with git SHA"]:::build
+        TV2["Trivy\nimage scan"]:::sec
     end
 
     subgraph GitOps["Update GitOps"]
-        KZ["kustomize edit set image"]
-        GC["git commit + pull --rebase + push"]
-        ACD["ArgoCD detects diff\ndeploys to EKS"]
+        KZ["kustomize edit set image"]:::cd
+        GC["git commit + rebase + push"]:::cd
+        ACD["ArgoCD deploys\nto Kubernetes"]:::cd
     end
 
     Push --> Security
-    Security -->|all pass| Build
-    Docker --> GHCR --> TV2 --> GitOps
-    KZ --> GC --> ACD
+    Security -->|all pass| Docker --> GHCR --> TV2 --> KZ --> GC --> ACD
 ```
-
-Each workflow only triggers on changes to its own service directory — a commit to `order-service/` won't rebuild `product-service`.
 
 ---
 
