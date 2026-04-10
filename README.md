@@ -109,10 +109,12 @@ sequenceDiagram
     participant OS as Order Service
     participant R as Redis
 
-    B->>GW: GET /api/orders/customer/:id
-    GW->>OS: GET /orders/customer/:id
-    OS->>R: get all orders for customer
-    R-->>OS: order data
+    B->>GW: GET /api/orders?customer=user@email.com
+    GW->>OS: GET /orders?customer=user@email.com
+    OS->>R: LRANGE customer:user@email.com:orders
+    R-->>OS: [id1, id2, id3]
+    OS->>R: pipeline GET order:id1, order:id2, order:id3
+    R-->>OS: order JSON objects
     OS-->>GW: JSON array
     GW-->>B: order list
 ```
@@ -123,9 +125,11 @@ sequenceDiagram
 
 **Language:** Node.js / Express  **Port:** 3000
 
-Single entry point for all API traffic from the frontend. No business logic — pure routing.
+Single entry point for all API traffic from the frontend. No business logic — pure routing. Includes CORS middleware for cross-origin requests during local development.
 
 **Why a gateway?** The frontend talks to one URL regardless of which backend service handles it. Services can be refactored or replaced without touching the frontend.
+
+**Why CORS?** During local development, the frontend runs on `localhost:3000` and the API on `localhost:4000` — different origins. Without CORS headers, the browser blocks POST requests (like placing orders). In production, Traefik routes everything through the same domain so CORS isn't needed.
 
 | Path | Proxied to |
 |------|-----------|
@@ -137,6 +141,7 @@ Single entry point for all API traffic from the frontend. No business logic — 
 |----------|------------|
 | `PRODUCT_SERVICE_URL` | Internal K8s DNS URL for product-service |
 | `ORDER_SERVICE_URL` | Internal K8s DNS URL for order-service |
+| `CORS_ORIGIN` | Allowed origin for CORS (default: `http://localhost:3000`) |
 
 ---
 
@@ -168,17 +173,19 @@ Manages the product catalogue with category filtering and full-text search.
 
 **Language:** Node.js / Express  **Port:** 3001  **Stores:** Redis + Kafka
 
-When an order is placed, two things happen in parallel — Redis write + Kafka publish.
+When an order is placed, three things happen in parallel — Redis write, customer index update, and Kafka publish.
 
-**Why Redis?** Orders are transient (24h TTL). Redis is sub-millisecond for this write-once, read-a-few-times pattern.
+**Why Redis?** Orders are transient (24h TTL). Redis is sub-millisecond for this write-once, read-a-few-times pattern. It runs in ElastiCache — AWS-managed Redis in the same VPC, so latency is minimal.
 
-**Why Kafka?** Decouples order-service from downstream consumers (notifications, inventory, analytics). Order-service publishes and moves on — it doesn't care who's listening.
+**Why a customer index?** Each order is stored as `order:<id>`, but to fetch all orders for a customer we maintain a Redis list at `customer:<email>:orders`. When an order is created, its ID is pushed onto this list. Fetching order history is then a single `LRANGE` + pipelined `GET`s — no scanning.
+
+**Why Kafka?** Decouples order-service from downstream consumers (notifications, inventory, analytics). Order-service publishes an `order.created` event and moves on — it doesn't care who's listening. Kafka is managed by Strimzi in KRaft mode (no ZooKeeper).
 
 | Method | Path | Description |
 |--------|------|-------------|
-| `POST` | `/orders` | Create. Body: `{ customerId, items: [{productId, name, price, quantity}] }` |
-| `GET` | `/orders/:id` | Get by ID |
-| `GET` | `/orders/customer/:id` | All orders for a customer |
+| `POST` | `/orders` | Create. Body: `{ customerId, items: [{productId, name, image_url, price, quantity}] }` |
+| `GET` | `/orders?customer={email}` | All orders for a customer (order history) |
+| `GET` | `/orders/:id` | Get single order by ID |
 | `GET` | `/health` | Liveness probe |
 
 | Variable | Source | Description |
