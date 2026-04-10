@@ -8,6 +8,7 @@
     "dev": "nodemon src/index.js"
   },
   "dependencies": {
+    "cors": "^2.8.6",
     "express": "^4.19.2",
     "http-proxy-middleware": "^3.0.0",
     "morgan": "^1.10.0"
