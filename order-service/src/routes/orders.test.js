@@ -1,5 +1,10 @@
 const request = require('supertest');
 
+// uuid v14 is ESM-only — Jest (CJS) can't require it, so mock it with a
+// predictable stub. Tests verify that side-effects were called with "whatever
+// id was generated", not with a specific UUID value.
+jest.mock('uuid', () => ({ v4: () => 'test-uuid-0000' }));
+
 // Mock Redis and Kafka before requiring the app — routes/orders.js pulls
 // these at module load time, so the mocks need to be registered first
 jest.mock('../redis', () => {
