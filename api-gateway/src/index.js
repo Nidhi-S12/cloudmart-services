@@ -48,17 +48,22 @@ app.use((req, res) => {
   res.status(404).json({ error: `Route ${req.method} ${req.path} not found` });
 });
 
-const server = app.listen(PORT, () => {
-  console.log(`api-gateway running on port ${PORT}`);
-  console.log(`  /api/products → ${PRODUCT_SERVICE_URL}`);
-  console.log(`  /api/orders   → ${ORDER_SERVICE_URL}`);
-});
+// Only start the server when this file is run directly — tests require() `app`
+// without starting the listener
+if (require.main === module) {
+  const server = app.listen(PORT, () => {
+    console.log(`api-gateway running on port ${PORT}`);
+    console.log(`  /api/products → ${PRODUCT_SERVICE_URL}`);
+    console.log(`  /api/orders   → ${ORDER_SERVICE_URL}`);
+  });
 
-// Graceful shutdown
-const shutdown = (signal) => {
-  console.log(`${signal} received, shutting down...`);
-  server.close(() => process.exit(0));
-};
+  const shutdown = (signal) => {
+    console.log(`${signal} received, shutting down...`);
+    server.close(() => process.exit(0));
+  };
 
-process.on('SIGTERM', () => shutdown('SIGTERM'));
-process.on('SIGINT',  () => shutdown('SIGINT'));
+  process.on('SIGTERM', () => shutdown('SIGTERM'));
+  process.on('SIGINT',  () => shutdown('SIGINT'));
+}
+
+module.exports = app;

@@ -1,18 +1,7 @@
-const express = require('express');
+const app = require('./app');
 const { connectProducer, disconnectProducer } = require('./kafka');
-const ordersRouter = require('./routes/orders');
 
-const app = express();
 const PORT = process.env.PORT || 3001;
-
-app.use(express.json());
-
-app.use('/orders', ordersRouter);
-
-app.get('/health', (req, res) => {
-  // Kubernetes liveness + readiness probes hit this
-  res.json({ status: 'ok', service: 'order-service' });
-});
 
 async function start() {
   // Connect Kafka producer before accepting traffic
