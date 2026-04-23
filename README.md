@@ -212,6 +212,11 @@ flowchart TD
         TV1["Trivy\ndependency CVEs"]:::sec
     end
 
+    subgraph Tests["Unit Tests"]
+        JT["Jest + supertest\n(api-gateway, order-service)"]:::build
+        PT["pytest + httpx + aiosqlite\n(product-service)"]:::build
+    end
+
     subgraph Build["Build & Push"]
         Docker["docker build\nmulti-stage"]:::build
         GHCR["push to registry\ntagged with git SHA"]:::build
@@ -225,8 +230,27 @@ flowchart TD
     end
 
     Push --> Security
-    Security -->|all pass| Docker --> GHCR --> TV2 --> KZ --> GC --> ACD
+    Security -->|all pass| Tests
+    Tests -->|all pass| Docker --> GHCR --> TV2 --> KZ --> GC --> ACD
 ```
+
+### Running tests locally
+
+```bash
+# api-gateway (Jest)
+cd api-gateway && npm install && npm test
+
+# order-service (Jest, Redis/Kafka mocked)
+cd order-service && npm install && npm test
+
+# product-service (pytest — in-memory SQLite, no external DB needed)
+cd product-service
+python -m venv .venv && source .venv/bin/activate
+pip install -r requirements-dev.txt
+python -m pytest
+```
+
+Tests mock external dependencies (Redis, Kafka, PostgreSQL) so they run fast and don't need Docker Compose running.
 
 ---
 
